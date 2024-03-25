@@ -1,19 +1,171 @@
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ConversationHandler,
+    filters,
+    ContextTypes
+)
+import mysql.connector
+from mysql.connector import Error
 
-token = '7147953244:AAEez1U_lGJ3hwLyIfkR2QbsHkQzSB3AsRI'
-user_name = 'jaimeadmin_bot'
+REGISTRO, EXAMEN = range(2)
+
+db_config = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': '',
+    'database': 'botelegram'
+}
 
 async def start(update: Update, context: ContextTypes):
-    #await update.message.reply_text('Hola es una prueba')
-    await update.message.reply_photo('https://uploadsloxafact.sfo3.digitaloceanspaces.com/logos/KydayaLogo.jpg')
+    user_id = update.message.from_user.id
+    try:
+        conexion = mysql.connector.connect(**db_config)
+        cursor = conexion.cursor()
+        cursor.execute("SELECT est_cedula FROM estudiante WHERE est_cedula = %s", (str(user_id),))
+        usuario = cursor.fetchone()
+        if usuario:
+            await update.message.reply_text('Ya estás registrado.')
+            return ConversationHandler.END
+        else:
+            await update.message.reply_text('Por favor, ingresa tu cédula y nombres separados por una coma. Ejemplo: 0123456789, Juan Pérez')
+            return REGISTRO
+    except Error as e:
+        await update.message.reply_text('Error al verificar el registro: ' + str(e))
+        return ConversationHandler.END
+    finally:
+        if conexion.is_connected():
+            cursor.close()
+            conexion.close()
+
+async def registro(update: Update, context: ContextTypes):
+    texto = update.message.text
+    cedula, nombre = texto.split(',', 1)
+    cedula = cedula.strip()
+    nombre = nombre.strip()
+
+    try:
+        conexion = mysql.connector.connect(**db_config)
+        cursor = conexion.cursor()
+        cursor.execute("SELECT est_cedula FROM estudiante WHERE est_cedula = %s", (cedula,))
+        estudiante = cursor.fetchone()
+        if estudiante:
+            await update.message.reply_text('Ya estás registrado.')
+            context.user_data['est_id'] = estudiante[0]
+            return await start_examen(update, context)
+        else:
+            cursor.execute("INSERT INTO estudiante (est_cedula, est_nombre) VALUES (%s, %s)", (cedula, nombre))
+            conexion.commit()
+            cursor.execute("SELECT est_id FROM estudiante WHERE est_cedula = %s", (cedula,))
+            estudiante = cursor.fetchone()
+            context.user_data['est_id'] = estudiante[0]
+            await update.message.reply_text('Registro completado con éxito. Comencemos el examen.')
+            return await start_examen(update, context)
+    except Error as e:
+        await update.message.reply_text('Error al registrar: ' + str(e))
+    finally:
+        if conexion.is_connected():
+            cursor.close()
+            conexion.close()
+
+    return ConversationHandler.END
+
+async def start_examen(update: Update, context: ContextTypes):
+    context.user_data['preguntas_respondidas'] = 0
+    await enviar_pregunta(update, context)
+    return EXAMEN
+
+async def enviar_pregunta(update: Update, context: ContextTypes):
+    try:
+        conexion = mysql.connector.connect(**db_config)
+        cursor = conexion.cursor()
+        cursor.execute("SELECT pre_id, pre_nombre FROM pregunta ORDER BY RAND() LIMIT 1")
+        pregunta = cursor.fetchone()
+        if pregunta:
+            context.user_data['pregunta_actual'] = pregunta[0]
+            cursor.execute("SELECT res_id, res_nombre FROM respuesta WHERE pre_id = %s", (pregunta[0],))
+            respuestas = cursor.fetchall()
+            
+            mensaje_respuesta = pregunta[1] + "\n"
+            for idx, (resp_id, resp) in enumerate(respuestas, start=1):
+                mensaje_respuesta += f"{idx}. {resp}\n"
+                context.user_data[f"resp_{idx}"] = resp_id
+            
+            await update.message.reply_text(mensaje_respuesta)
+        else:
+            await update.message.reply_text("No hay preguntas disponibles.")
+            return ConversationHandler.END
+    except Error as e:
+        await update.message.reply_text('Error al obtener la pregunta: ' + str(e))
+        return ConversationHandler.END
+    finally:
+        if conexion.is_connected():
+            cursor.close()
+            conexion.close()
+
+async def manejar_respuesta(update: Update, context: ContextTypes):
+    seleccion_usuario = update.message.text
+    pregunta_actual_id = context.user_data['pregunta_actual']
+    estudiante_id = context.user_data['est_id']
+    respuesta_id = context.user_data.get(f"resp_{seleccion_usuario}")
+
+    if respuesta_id is None:
+        await update.message.reply_text("Por favor, selecciona una opción válida.")
+        return EXAMEN
+
+    try:
+        conexion = mysql.connector.connect(**db_config)
+        cursor = conexion.cursor()
+
+        # Validar si la respuesta es correcta basándose en res_valor
+        cursor.execute("SELECT res_valor FROM respuesta WHERE res_id = %s", (respuesta_id,))
+        es_correcta = cursor.fetchone()[0]
+
+        if es_correcta:
+            await update.message.reply_text("Correcto!")
+        else:
+            await update.message.reply_text("Incorrecto, intenta con la siguiente pregunta.")
+        
+        # Almacenar la respuesta en la tabla examen
+        cursor.execute("INSERT INTO examen (est_id, pre_id, res_id) VALUES (%s, %s, %s)", (estudiante_id, pregunta_actual_id, respuesta_id))
+        conexion.commit()
+
+        context.user_data['preguntas_respondidas'] += 1
+        if context.user_data['preguntas_respondidas'] < 10:
+            await enviar_pregunta(update, context)  # Envía la siguiente pregunta
+        else:
+            await update.message.reply_text("Examen completado. ¡Buen trabajo!")
+            return ConversationHandler.END
+    except Error as e:
+        await update.message.reply_text('Error al validar la respuesta o al guardar en la base de datos: ' + str(e))
+        return ConversationHandler.END
+    finally:
+        if conexion.is_connected():
+            cursor.close()
+            conexion.close()
+
+
+async def cancelar(update: Update, context: ContextTypes):
+    await update.message.reply_text('Registro cancelado.')
+    return ConversationHandler.END
 
 if __name__ == '__main__':
     print('Iniciando el bot')
+    token = '7147953244:AAEez1U_lGJ3hwLyIfkR2QbsHkQzSB3AsRI'
     app = Application.builder().token(token).build()
 
-    app.add_handler(CommandHandler('start', start))
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            REGISTRO: [MessageHandler(filters.TEXT & ~filters.COMMAND, registro)],
+            EXAMEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_respuesta)],
+        },
+        fallbacks=[CommandHandler('cancelar', cancelar)],
+        #conversation_timeout=60 
+    )
 
-    #app.add_handler((MessageHandler(filters.TEXT,handle_message)))
+    app.add_handler(conv_handler)
 
-    app.run_polling(poll_interval=1,timeout=10)
+    app.run_polling()
