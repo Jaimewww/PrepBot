@@ -41,39 +41,46 @@ async def start(update: Update, context: ContextTypes):
             conexion.close()
 
 async def registro(update: Update, context: ContextTypes):
+    
     texto = update.message.text
-    cedula, nombre = texto.split(',', 1)
-    cedula = cedula.strip()
-    nombre = nombre.strip()
+    if ',' in texto:
+        cedula, nombre = texto.split(',', 1)
+        cedula = cedula.strip()
+        nombre = nombre.strip()
 
-    try:
-        conexion = mysql.connector.connect(**db_config)
-        cursor = conexion.cursor()
-        cursor.execute("SELECT est_cedula FROM estudiante WHERE est_cedula = %s", (cedula,))
-        estudiante = cursor.fetchone()
-        if estudiante:
-            await update.message.reply_text('Ya estás registrado.')
-            context.user_data['est_id'] = estudiante[0]
-            return await start_examen(update, context)
-        else:
-            cursor.execute("INSERT INTO estudiante (est_cedula, est_nombre) VALUES (%s, %s)", (cedula, nombre))
-            conexion.commit()
-            cursor.execute("SELECT est_id FROM estudiante WHERE est_cedula = %s", (cedula,))
+        try:
+            conexion = mysql.connector.connect(**db_config)
+            cursor = conexion.cursor()
+            cursor.execute("SELECT est_id,est_cedula FROM estudiante WHERE est_cedula = %s", (cedula,))
             estudiante = cursor.fetchone()
-            context.user_data['est_id'] = estudiante[0]
-            await update.message.reply_text('Registro completado con éxito. Comencemos el examen.')
-            return await start_examen(update, context)
-    except Error as e:
-        await update.message.reply_text('Error al registrar: ' + str(e))
-    finally:
-        if conexion.is_connected():
-            cursor.close()
-            conexion.close()
+            if estudiante:
+                await update.message.reply_text('Ya estás registrado.')
+                context.user_data['est_id'] = estudiante[0]
+                return await start_examen(update, context)
+            else:
+                cursor.execute("INSERT INTO estudiante (est_cedula, est_nombre) VALUES (%s, %s)", (cedula, nombre))
+                conexion.commit()
+                cursor.execute("SELECT est_id FROM estudiante WHERE est_cedula = %s", (cedula,))
+                estudiante = cursor.fetchone()
+                context.user_data['est_id'] = estudiante[0]
+                await update.message.reply_text('Registro completado con éxito. Comencemos el examen.')
+                return await start_examen(update, context)
+        except Error as e:
+            await update.message.reply_text('Error al registrar: ' + str(e))
+        finally:
+            if conexion.is_connected():
+                cursor.close()
+                conexion.close()
 
-    return ConversationHandler.END
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text('No se encontró la coma. Por favor, ingresa tu cédula y nombres separados por una coma. Ejemplo: 0123456789, Juan Pérez')
+        return REGISTRO
+    
 
 async def start_examen(update: Update, context: ContextTypes):
     context.user_data['preguntas_respondidas'] = 0
+    context.user_data['respuestas_correctas'] = 0
     await enviar_pregunta(update, context)
     return EXAMEN
 
@@ -93,9 +100,7 @@ async def enviar_pregunta(update: Update, context: ContextTypes):
                 mensaje_respuesta += f"{idx}. {resp}\n"
                 context.user_data[f"resp_{idx}"] = resp_id
             
-            #await update.message.reply_text(mensaje_respuesta)
-            mensaje_respuesta_str = str(mensaje_respuesta)
-            await update.message.reply_photo(mensaje_respuesta_str)
+            await update.message.reply_text(mensaje_respuesta)
         else:
             await update.message.reply_text("No hay preguntas disponibles.")
             return ConversationHandler.END
@@ -121,24 +126,24 @@ async def manejar_respuesta(update: Update, context: ContextTypes):
         conexion = mysql.connector.connect(**db_config)
         cursor = conexion.cursor()
 
-        # Validar si la respuesta es correcta basándose en res_valor
         cursor.execute("SELECT res_valor FROM respuesta WHERE res_id = %s", (respuesta_id,))
         es_correcta = cursor.fetchone()[0]
 
         if es_correcta:
             await update.message.reply_text("Correcto!")
+            context.user_data['respuestas_correctas'] = context.user_data.get('respuestas_correctas', 0) + 1
         else:
             await update.message.reply_text("Incorrecto, intenta con la siguiente pregunta.")
         
-        # Almacenar la respuesta en la tabla examen
         cursor.execute("INSERT INTO examen (est_id, pre_id, res_id) VALUES (%s, %s, %s)", (estudiante_id, pregunta_actual_id, respuesta_id))
         conexion.commit()
 
         context.user_data['preguntas_respondidas'] += 1
         if context.user_data['preguntas_respondidas'] < 10:
-            await enviar_pregunta(update, context)  # Envía la siguiente pregunta
+            await enviar_pregunta(update, context)
         else:
-            await update.message.reply_text("Examen completado. ¡Buen trabajo!")
+            puntaje_final = context.user_data.get('respuestas_correctas', 0) * 10
+            await update.message.reply_text(f"Examen completado. ¡Buen trabajo! Tu puntaje es: {puntaje_final} puntos.")
             return ConversationHandler.END
     except Error as e:
         await update.message.reply_text('Error al validar la respuesta o al guardar en la base de datos: ' + str(e))
