@@ -1,3 +1,4 @@
+import random
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -90,8 +91,14 @@ async def enviar_pregunta(update: Update, context: ContextTypes):
         conexion = mysql.connector.connect(**db_config)
         cursor = conexion.cursor()
 
-        # Obtiene todas las preguntas que no han sido usadas
-        cursor.execute("SELECT pre_id, pre_nombre FROM pregunta WHERE pre_id NOT IN (%s)" % ','.join(['%s'] * len(context.user_data['preguntas_usadas'])), tuple(context.user_data['preguntas_usadas']))
+        # Lista de IDs de preguntas ya utilizadas para construir la parte de la consulta SQL
+        preguntas_usadas = list(context.user_data['preguntas_usadas'])
+        if preguntas_usadas:
+            query = "SELECT pre_id, pre_nombre FROM pregunta WHERE pre_id NOT IN (%s)" % ', '.join(['%s'] * len(preguntas_usadas))
+            cursor.execute(query, tuple(preguntas_usadas))
+        else:
+            cursor.execute("SELECT pre_id, pre_nombre FROM pregunta")
+
         preguntas_disponibles = cursor.fetchall()
 
         if preguntas_disponibles:
@@ -118,7 +125,6 @@ async def enviar_pregunta(update: Update, context: ContextTypes):
         if conexion.is_connected():
             cursor.close()
             conexion.close()
-
 
 async def manejar_respuesta(update: Update, context: ContextTypes):
     seleccion_usuario = update.message.text
