@@ -81,6 +81,7 @@ async def registro(update: Update, context: ContextTypes):
 async def start_examen(update: Update, context: ContextTypes):
     context.user_data['preguntas_respondidas'] = 0
     context.user_data['respuestas_correctas'] = 0
+    context.user_data['preguntas_usadas'] = set()  # Inicializa el conjunto de preguntas usadas
     await enviar_pregunta(update, context)
     return EXAMEN
 
@@ -88,10 +89,16 @@ async def enviar_pregunta(update: Update, context: ContextTypes):
     try:
         conexion = mysql.connector.connect(**db_config)
         cursor = conexion.cursor()
-        cursor.execute("SELECT pre_id, pre_nombre FROM pregunta ORDER BY RAND() LIMIT 1")
-        pregunta = cursor.fetchone()
-        if pregunta:
+
+        # Obtiene todas las preguntas que no han sido usadas
+        cursor.execute("SELECT pre_id, pre_nombre FROM pregunta WHERE pre_id NOT IN (%s)" % ','.join(['%s'] * len(context.user_data['preguntas_usadas'])), tuple(context.user_data['preguntas_usadas']))
+        preguntas_disponibles = cursor.fetchall()
+
+        if preguntas_disponibles:
+            pregunta = random.choice(preguntas_disponibles)
             context.user_data['pregunta_actual'] = pregunta[0]
+            context.user_data['preguntas_usadas'].add(pregunta[0])  # Añade la pregunta actual al conjunto de usadas
+
             cursor.execute("SELECT res_id, res_nombre FROM respuesta WHERE pre_id = %s", (pregunta[0],))
             respuestas = cursor.fetchall()
             
@@ -102,7 +109,7 @@ async def enviar_pregunta(update: Update, context: ContextTypes):
             
             await update.message.reply_text(mensaje_respuesta)
         else:
-            await update.message.reply_text("No hay preguntas disponibles.")
+            await update.message.reply_text("No hay más preguntas disponibles, el examen ha terminado.")
             return ConversationHandler.END
     except Error as e:
         await update.message.reply_text('Error al obtener la pregunta: ' + str(e))
@@ -111,6 +118,7 @@ async def enviar_pregunta(update: Update, context: ContextTypes):
         if conexion.is_connected():
             cursor.close()
             conexion.close()
+
 
 async def manejar_respuesta(update: Update, context: ContextTypes):
     seleccion_usuario = update.message.text
