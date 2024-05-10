@@ -93,7 +93,9 @@ async def enviar_pregunta(update: Update, context: ContextTypes):
                 mensaje_respuesta += f"{idx}. {resp}\n"
                 context.user_data[f"resp_{idx}"] = resp_id
             
-            await update.message.reply_text(mensaje_respuesta)
+            #await update.message.reply_text(mensaje_respuesta)
+            mensaje_respuesta_str = str(mensaje_respuesta)
+            await update.message.reply_photo(mensaje_respuesta_str)
         else:
             await update.message.reply_text("No hay preguntas disponibles.")
             return ConversationHandler.END
