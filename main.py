@@ -164,7 +164,7 @@ async def manejar_respuesta(update: Update, context: ContextTypes):
         else:
             puntaje_final = context.user_data.get('respuestas_correctas', 0) * 10
             cursor.execute("INSERT INTO ranking (est_id, ran_puntaje) VALUES (%s, %s)", (estudiante_id, puntaje_final))
-            await update.message.reply_text(f"Examen completado. ¡Buen trabajo! Tu puntaje es: {puntaje_final} puntos.")
+            await update.message.reply_text(f"Examen completado. ¡Buen trabajo! Tu puntaje es: {puntaje_final}/100 puntos.")
             cursor.execute("SELECT * FROM ranking r JOIN estudiante e ON e.est_id = r.est_id GROUP BY e.est_id DESC ORDER BY r.ran_puntaje LIMIT 5")
             ranking_rta = cursor.fetchone()[0]
             await update.message.reply_text(ranking_rta)
