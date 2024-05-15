@@ -162,8 +162,12 @@ async def manejar_respuesta(update: Update, context: ContextTypes):
         if context.user_data['preguntas_respondidas'] < 10:
             await enviar_pregunta(update, context)
         else:
+            cursor.execute("INSERT INTO ranking (est_id, ran_puntaje) VALUES (%s, %s)", (estudiante_id, puntaje_final))
             puntaje_final = context.user_data.get('respuestas_correctas', 0) * 10
             await update.message.reply_text(f"Examen completado. ¡Buen trabajo! Tu puntaje es: {puntaje_final} puntos.")
+            cursor.execute("SELECT * FROM ranking r JOIN estudiante e ON e.est_id = r.est_id GROUP BY e.est_id DESC ORDER BY r.ran_puntaje LIMIT 5")
+            ranking_rta = cursor.fetchone()[0]
+            await update.message.reply_text(ranking_rta)
             return ConversationHandler.END
     except Error as e:
         await update.message.reply_text('Error al validar la respuesta o al guardar en la base de datos: ' + str(e))
