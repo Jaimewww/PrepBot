@@ -32,7 +32,7 @@ class Utilitario(object):
                     mensajeRta.rta = True
                 else:
                     #print("Incorrecto")
-                    mensajeRta.mensaje = "Incorrecto"
+                    mensajeRta.mensaje = "Error al validar la cédula."
                     mensajeRta.rta = False
             else:
                 #print("Error en los dos primeros dígitos")
