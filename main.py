@@ -1,5 +1,6 @@
 import random
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -15,8 +16,8 @@ from reqs import Utilitario, MensajeRta
 REGISTRO, EXAMEN = range(2)
 
 db_config = {
-    'host': 'localhost',
-    'user': 'root',
+    'host': '192.168.1.7',
+    'user': 'jaime',
     'password': '',
     'database': 'botelegram'
 }
@@ -164,10 +165,29 @@ async def manejar_respuesta(update: Update, context: ContextTypes):
         else:
             puntaje_final = context.user_data.get('respuestas_correctas', 0) * 10
             cursor.execute("INSERT INTO ranking (est_id, ran_puntaje) VALUES (%s, %s)", (estudiante_id, puntaje_final))
+            conexion.commit()
             await update.message.reply_text(f"Examen completado. ¡Buen trabajo! Tu puntaje es: {puntaje_final}/100 puntos.")
-            cursor.execute("SELECT * FROM ranking r JOIN estudiante e ON e.est_id = r.est_id GROUP BY e.est_id DESC ORDER BY r.ran_puntaje LIMIT 5")
-            ranking_rta = cursor.fetchone()[0]
-            await update.message.reply_text(ranking_rta)
+            
+            # Obtener el ranking
+            cursor.execute("""
+                SELECT e.est_nombre, r.ran_puntaje
+                FROM ranking r
+                JOIN estudiante e ON e.est_id = r.est_id
+                ORDER BY r.ran_puntaje DESC
+                LIMIT 5
+            """)
+            ranking_rta = cursor.fetchall()
+            
+            # Crear la tabla en formato Markdown
+            ranking_mensaje = "Ranking:\n"
+            ranking_mensaje += "```\n"
+            ranking_mensaje += "Posición | Nombre          | Puntaje\n"
+            ranking_mensaje += "---------|-----------------|--------\n"
+            for idx, (nombre, puntaje) in enumerate(ranking_rta, start=1):
+                ranking_mensaje += f"{idx:<9} | {nombre:<15} | {puntaje}\n"
+            ranking_mensaje += "```\n"
+            
+            await update.message.reply_text(ranking_mensaje, parse_mode=ParseMode.MARKDOWN)
             return ConversationHandler.END
     except Error as e:
         await update.message.reply_text('Error al validar la respuesta o al guardar en la base de datos: ' + str(e))
