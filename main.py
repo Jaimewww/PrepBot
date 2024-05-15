@@ -16,8 +16,8 @@ from reqs import Utilitario, MensajeRta
 REGISTRO, EXAMEN = range(2)
 
 db_config = {
-    'host': '192.168.1.7',
-    'user': 'jaime',
+    'host': 'localhost',
+    'user': 'root',
     'password': '',
     'database': 'botelegram'
 }
