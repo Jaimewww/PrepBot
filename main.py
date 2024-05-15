@@ -76,7 +76,7 @@ async def registro(update: Update, context: ContextTypes):
                     cursor.close()
                     conexion.close()
         else:
-            await update.message.reply_text(mensajeRta.mensaje)
+            await update.message.reply_text(mensajeRta.mensaje + " Por favor, ingresa tu cédula y nombres separados por una coma. Ejemplo: 0123456789, Juan Pérez")
             return REGISTRO
 
         return ConversationHandler.END
