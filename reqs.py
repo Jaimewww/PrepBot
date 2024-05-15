@@ -1,5 +1,11 @@
-class validacion_cedula(object):
-    def validacion(cedula):
+class MensajeRta():
+    mensaje = ""
+    rta = True
+
+class Utilitario(object):
+    def validacionCedula(cedula):
+        mensajeRta = MensajeRta
+        #rta = True
         if len(cedula) == 10:
             provstr = str(cedula)
             prov = int(provstr[:2])
@@ -20,12 +26,21 @@ class validacion_cedula(object):
                 residuo = sum % 10
                 resultado = 10 - residuo
                 if resultado == ult_num:
-                    print("Correcto")
+                    #print("Correcto")
+                    #rta =True
+                    mensajeRta.mensaje = "Correcto"
+                    mensajeRta.rta = True
                 else:
-                    print("Incorrecto")
+                    #print("Incorrecto")
+                    mensajeRta.mensaje = "Incorrecto"
+                    mensajeRta.rta = False
             else:
-                print("Error en los dos primeros dígitos")
+                #print("Error en los dos primeros dígitos")
+                #rta =False
+                mensajeRta.mensaje = "Error en los dos primeros dígitos"
+                mensajeRta.rta = False
         else:
-            print("La cédula debe tener 10 dígitos")   
-
-            
+            #print("La cédula debe tener 10 dígitos")
+            mensajeRta.mensaje = "La cédula debe tener 10 dígitos"
+            mensajeRta.rta = False
+        return mensajeRta

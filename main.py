@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 import mysql.connector
 from mysql.connector import Error
+from reqs import Utilitario, MensajeRta
 
 REGISTRO, EXAMEN = range(2)
 
@@ -48,30 +49,35 @@ async def registro(update: Update, context: ContextTypes):
         cedula, nombre = texto.split(',', 1)
         cedula = cedula.strip()
         nombre = nombre.strip()
-
-        try:
-            conexion = mysql.connector.connect(**db_config)
-            cursor = conexion.cursor()
-            cursor.execute("SELECT est_id,est_cedula FROM estudiante WHERE est_cedula = %s", (cedula,))
-            estudiante = cursor.fetchone()
-            if estudiante:
-                await update.message.reply_text('Ya estás registrado.')
-                context.user_data['est_id'] = estudiante[0]
-                return await start_examen(update, context)
-            else:
-                cursor.execute("INSERT INTO estudiante (est_cedula, est_nombre) VALUES (%s, %s)", (cedula, nombre))
-                conexion.commit()
-                cursor.execute("SELECT est_id FROM estudiante WHERE est_cedula = %s", (cedula,))
+        mensajeRta = MensajeRta
+        mensajeRta = Utilitario.validacionCedula(cedula)
+        if mensajeRta.rta:
+            try:
+                conexion = mysql.connector.connect(**db_config)
+                cursor = conexion.cursor()
+                cursor.execute("SELECT est_id,est_cedula FROM estudiante WHERE est_cedula = %s", (cedula,))
                 estudiante = cursor.fetchone()
-                context.user_data['est_id'] = estudiante[0]
-                await update.message.reply_text('Registro completado con éxito. Comencemos el examen.')
-                return await start_examen(update, context)
-        except Error as e:
-            await update.message.reply_text('Error al registrar: ' + str(e))
-        finally:
-            if conexion.is_connected():
-                cursor.close()
-                conexion.close()
+                if estudiante:
+                    await update.message.reply_text('Ya estás registrado.')
+                    context.user_data['est_id'] = estudiante[0]
+                    return await start_examen(update, context)
+                else:
+                    cursor.execute("INSERT INTO estudiante (est_cedula, est_nombre) VALUES (%s, %s)", (cedula, nombre))
+                    conexion.commit()
+                    cursor.execute("SELECT est_id FROM estudiante WHERE est_cedula = %s", (cedula,))
+                    estudiante = cursor.fetchone()
+                    context.user_data['est_id'] = estudiante[0]
+                    await update.message.reply_text('Registro completado con éxito. Comencemos el examen.')
+                    return await start_examen(update, context)
+            except Error as e:
+                await update.message.reply_text('Error al registrar: ' + str(e))
+            finally:
+                if conexion.is_connected():
+                    cursor.close()
+                    conexion.close()
+        else:
+            await update.message.reply_text(mensajeRta.mensaje)
+            return REGISTRO
 
         return ConversationHandler.END
     else:
