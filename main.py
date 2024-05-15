@@ -204,7 +204,7 @@ async def cancelar(update: Update, context: ContextTypes):
 
 if __name__ == '__main__':
     print('Iniciando el bot')
-    token = '7147953244:AAEez1U_lGJ3hwLyIfkR2QbsHkQzSB3AsRI'
+    token = ''
     app = Application.builder().token(token).build()
 
     conv_handler = ConversationHandler(
